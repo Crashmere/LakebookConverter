@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# 构建产物
+dist/
+build/
+*.egg-info/
+
+# 测试 / 覆盖率
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 项目输出
+output/
+
+# 测试用的 lakebook 文件（体积较大）
+*.lakebook

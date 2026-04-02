@@ -1,0 +1,11 @@
+[project]
+name = "lakebook"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.14"
+dependencies = [
+    "beautifulsoup4==4.14.3",
+    "markdownify==1.2.2",
+    "pyyaml==6.0.3",
+    "requests==2.32.5",
+]
