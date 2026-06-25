@@ -42,7 +42,8 @@
 
 - 完整还原知识库的文件夹层级结构
 - LaTeX 数学公式从图片还原为 `$...$` / `$$...$$` 文本
-- 可选下载外链图片到本地 `attachments/` 目录
+- 默认下载外链图片到本地 `attachments/` 目录（可用 `--nopic` 跳过）
+- 默认转换表格文档为 CSV（可用 `--nosheet` 跳过）
 - Excel 日期序列号自动转换为 `YYYY-MM-DD` 字符串
 - 批量处理多个 `.lakebook` 文件或整个目录
 
@@ -68,17 +69,20 @@ uv sync
 
 ```bash
 # 转换单个文件，输出到 output/ 目录
+# 默认会下载图片并转换表格文档
 python lakebook_converter.py 我的知识库.lakebook output/
 
-# 同时转换表格文档（默认只转换普通文档）
-python lakebook_converter.py 我的知识库.lakebook output/ --convert-sheets
+# 跳过图片下载，保留外链
+python lakebook_converter.py 我的知识库.lakebook output/ --nopic
 
-# 表格转为 Obsidian Sheet Plus 格式，并下载图片到本地
-python lakebook_converter.py 我的知识库.lakebook output/ \
-    --convert-sheets --sheet-format sheet --download-image
+# 表格转为 Obsidian Sheet Plus 格式
+python lakebook_converter.py 我的知识库.lakebook output/ --sheet-format sheet
+
+# 只转换普通文档，不下载图片，也不处理表格
+python lakebook_converter.py 我的知识库.lakebook output/ --nopic --nosheet
 
 # 批量处理目录下的所有 .lakebook 文件
-python lakebook_converter.py /path/to/exports/ output/ --convert-sheets
+python lakebook_converter.py /path/to/exports/ output/
 ```
 
 **示例输出目录结构：**
@@ -89,12 +93,12 @@ output/
     ├── 第一章_基础知识/        ← 还原知识库文件夹层级
     │   ├── HTML入门.md
     │   ├── CSS入门.md
-    │   └── attachments/       ← 图片（需 --download-image）
+    │   └── attachments/       ← 图片（默认启用，--nopic 可跳过）
     │       ├── HTML入门_001.png
     │       └── CSS入门_001.jpg
     ├── 第二章_进阶/
     │   ├── JavaScript.md
-    │   └── 数据处理.csv        ← 表格文档（需 --convert-sheets）
+    │   └── 数据处理.csv        ← 表格文档（默认启用，--nosheet 可跳过）
     └── 项目总览.md
 ```
 
@@ -110,9 +114,9 @@ python lakebook_converter.py <lakebook...> <output> [选项]
 |---|---|---|
 | `lakebook` | 位置参数（1 个或多个） | `.lakebook` 文件路径，或包含 `.lakebook` 文件的目录 |
 | `output` | 位置参数 | 输出根目录，不存在时自动创建 |
-| `--download-image` | 开关 | 将文档中的外链图片下载到 `attachments/` 子目录 |
-| `--convert-sheets` | 开关 | 转换表格文档；不加此选项时表格文档会被跳过 |
-| `--sheet-format {csv,sheet}` | 可选值，默认 `csv` | 表格输出格式：`csv` 或 `sheet`（Obsidian Sheet Plus）|
+| `--nopic` | 开关 | 跳过图片下载，保留文档中的原始外链图片 URL |
+| `--nosheet` | 开关 | 跳过表格文档转换，仅输出普通文档 Markdown |
+| `--sheet-format {csv,sheet}` | 可选值，默认 `csv` | 表格输出格式：`csv` 或 `sheet`（Obsidian Sheet Plus）；仅在未使用 `--nosheet` 时生效 |
 
 ---
 
@@ -382,7 +386,7 @@ body     → 作为待转换的 HTML
   $E=mc^2$
 ```
 
-**步骤 4（可选）：下载图片**
+**步骤 4（按配置）：下载图片**
 
 ```
 输入：<img src="https://example.com/photo.jpg"/>
@@ -693,7 +697,7 @@ excel-pro-plugin: parsed
 - 编码：UTF-8
 - 标题：ATX 风格（`#` 号）
 - 公式：`$...$`（行内）、`$$...$$`（块级）
-- 图片：若启用 `--download-image`，`src` 改为 `./attachments/文件名`
+- 图片：默认下载到本地；使用 `--nopic` 时保留原始外链 URL
 
 ### 8.2 目录层级映射
 
@@ -725,7 +729,7 @@ excel-pro-plugin: parsed
 
 ### 8.4 图片附件
 
-启用 `--download-image` 时，每篇文档会在其输出目录下创建 `attachments/` 子目录：
+默认情况下，每篇文档会在其输出目录下创建 `attachments/` 子目录；使用 `--nopic` 时不会创建：
 
 ```
 文件命名格式：<清理后的文档标题>_<序号3位>.扩展名
@@ -759,15 +763,19 @@ excel-pro-plugin: parsed
 | `pyyaml` | **必须** | 解析 `tocYml` 字段（YAML 格式的目录结构） | 抛出 `ImportError`，**无法运行** |
 | `markdownify` | 推荐 | HTML → Markdown 转换（保留格式） | 降级为正则剥除 HTML 标签，**丢失所有格式** |
 | `beautifulsoup4` | 推荐 | HTML 解析（LaTeX 提取、图片下载） | 跳过 LaTeX 还原和图片下载 |
-| `requests` | 可选 | 下载外链图片（仅 `--download-image` 时需要） | 图片保留外链，不下载到本地 |
+| `requests` | 可选 | 默认下载外链图片（使用 `--nopic` 可跳过） | 图片保留外链，不下载到本地 |
 
 ---
 
 ## 10. 常见问题
 
-**Q：为什么表格文档默认不转换？**
+**Q：如何跳过表格文档转换？**
 
-A：表格文档（Sheet）需要额外的解压和格式转换，处理时间较长。加 `--convert-sheets` 选项明确启用。
+A：使用 `--nosheet`。默认情况下，表格文档会一并转换；加上该参数后，只输出普通文档的 Markdown。
+
+**Q：如何跳过图片下载？**
+
+A：使用 `--nopic`。此时文档中的图片将保留原始外链 URL，不会下载到本地 `attachments/` 目录。
 
 **Q：`--sheet-format sheet` 和 `csv` 有什么区别？**
 

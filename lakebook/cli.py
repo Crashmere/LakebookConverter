@@ -8,13 +8,17 @@
 
 用法示例：
   # 转换单个文件，输出到 output/ 目录
+  # 默认会转换普通文档、表格文档，并下载图片
   python lakebook_converter.py my_book.lakebook output/
 
-  # 同时转换表格文档为 CSV，并下载图片
-  python lakebook_converter.py my_book.lakebook output/ --convert-sheets --download-image
+  # 仅跳过图片下载（保留外链）
+  python lakebook_converter.py my_book.lakebook output/ --nopic
 
   # 表格转换为 Obsidian Sheet Plus 格式
-  python lakebook_converter.py my_book.lakebook output/ --convert-sheets --sheet-format sheet
+  python lakebook_converter.py my_book.lakebook output/ --sheet-format sheet
+
+  # 仅转换普通文档，不处理图片和表格
+  python lakebook_converter.py my_book.lakebook output/ --nopic --nosheet
 
   # 批量处理目录下所有 .lakebook 文件
   python lakebook_converter.py /path/to/exports/ output/
@@ -74,7 +78,8 @@ def main() -> None:
         prog="lakebook_converter",
         description=(
             "语雀 Lakebook 转换工具\n"
-            "将 .lakebook 导出文件转换为 Markdown（普通文档）或 CSV/Sheet Plus（表格文档）"
+            "将 .lakebook 导出文件转换为 Markdown（普通文档）和 CSV/Sheet Plus（表格文档）\n"
+            "默认会下载外链图片并转换表格文档，可用参数显式跳过"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -89,21 +94,23 @@ def main() -> None:
         help="输出根目录路径，每个 lakebook 文件会在此目录下创建对应的子目录",
     )
     parser.add_argument(
-        "--download-image",
-        action="store_true",
-        help="将文档中的外链图片下载到本地 attachments/ 目录（需要安装 requests）",
+        "--nopic",
+        action="store_false",
+        dest="download_image",
+        help="跳过外链图片下载，保留原始图片 URL",
     )
     parser.add_argument(
-        "--convert-sheets",
-        action="store_true",
-        help="转换表格文档（默认跳过，仅转换普通文档为 Markdown）",
+        "--nosheet",
+        action="store_false",
+        dest="convert_sheets",
+        help="跳过表格文档转换，仅输出普通文档",
     )
     parser.add_argument(
         "--sheet-format",
         choices=["csv", "sheet"],
         default="csv",
         help=(
-            "表格文档的输出格式：\n"
+            "表格文档的输出格式（默认会转换表格文档）：\n"
             "  csv   - 通用 CSV 文件，可直接用 Excel 等打开（默认）\n"
             "  sheet - Obsidian Sheet Plus 格式（.md 文件，需安装 excel-pro 插件）"
         ),

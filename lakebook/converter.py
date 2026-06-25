@@ -48,11 +48,11 @@ def _handle_sheet_doc(
         output_dir_path:  输出目录
         sanitized_title:  清理后的标题（用作文件名前缀）
         title:            原始标题（用于日志和 Univer JSON 的 name 字段）
-        convert_sheets:   是否转换表格（对应 --convert-sheets 选项）
+        convert_sheets:   是否转换表格（默认为 True，可通过 --nosheet 禁用）
         sheet_format:     输出格式，"csv" 或 "sheet"
     """
     if not convert_sheets:
-        print(f"  跳过表格文档: {title}（使用 --convert-sheets 选项可启用转换）")
+        print(f"  跳过表格文档: {title}（使用 --nosheet 选项禁用了表格转换）")
         return
 
     if sheet_format == "sheet":

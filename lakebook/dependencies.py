@@ -12,7 +12,7 @@
   markdownify   将 HTML 转为 Markdown（推荐，无则降级为正则剥标签）
   beautifulsoup4 HTML 解析，用于 LaTeX 提取和图片下载（推荐安装）
   pyyaml        解析 TOC 中的 YAML 格式目录结构（必须安装）
-  requests      下载外链图片到本地（仅 --download-image 时需要）
+  requests      默认用于下载外链图片到本地（可通过 --nopic 跳过）
 """
 
 # ── markdownify ───────────────────────────────────────────────────────────────

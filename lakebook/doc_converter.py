@@ -11,9 +11,9 @@
      表达式替换 body HTML 中对应的 <img> 占位符，生成可在 Obsidian 等
      工具中直接渲染的 $...$ / $$...$$ 语法。
 
-  2. 图片下载（可选）
-     若启用 --download-image，将 body HTML 中所有外链图片下载到
-     <输出目录>/attachments/ 并更新 src 为相对路径。
+  2. 图片下载（默认启用）
+     默认将 body HTML 中所有外链图片下载到 <输出目录>/attachments/
+     并更新 src 为相对路径；若使用 --nopic 则跳过此步骤。
 
   3. HTML → Markdown 转换
      优先使用 markdownify 库（效果更好），不可用时降级为正则剥标签。
@@ -260,7 +260,7 @@ def convert_doc_to_markdown(
       1. 从 body_asl 提取 LaTeX 公式字典
       2. 获取正文 HTML（优先 body，其次 body_asl）
       3. 用 LaTeX 源码替换公式图片
-      4. 可选：下载外链图片到本地 attachments/ 目录
+      4. 按配置下载外链图片到本地 attachments/ 目录
       5. HTML → Markdown 转换
       6. Markdown 美化（去除冗余空白）
       7. 写入 .md 文件
@@ -284,7 +284,7 @@ def convert_doc_to_markdown(
     if latex_dict:
         html = replace_latex_images(html, latex_dict)
 
-    # 步骤 4：（可选）下载外链图片到本地
+    # 步骤 4：按配置下载外链图片到本地
     if download_image:
         html = download_images_and_patch_html(output_dir_path, sanitized_title, html)
 
