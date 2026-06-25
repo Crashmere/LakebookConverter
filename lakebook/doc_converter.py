@@ -38,6 +38,34 @@ from lakebook.utils import pretty_md
 
 # ── HTML → Markdown ───────────────────────────────────────────────────────────
 
+def _extract_code_language(pre_tag) -> str:
+    """
+    从语雀导出的 <pre> 代码块中提取语言标记。
+
+    语雀在 body HTML 中通常会以两种方式保存语言：
+    - data-language="bash"
+    - class="ne-codeblock language-bash"
+
+    Args:
+        pre_tag: markdownify 传入的 <pre> 标签对象
+
+    Returns:
+        代码块语言名；若缺失则返回空字符串
+    """
+    language = str(pre_tag.get("data-language", "")).strip()
+    if language:
+        return language
+
+    class_names = pre_tag.get("class", [])
+    if isinstance(class_names, str):
+        class_names = [class_names]
+
+    for class_name in class_names:
+        if class_name.startswith("language-") and len(class_name) > len("language-"):
+            return class_name[len("language-"):]
+
+    return ""
+
 def html_to_markdown(html: str) -> str:
     """
     将 HTML 字符串转换为 Markdown 格式。
@@ -52,7 +80,11 @@ def html_to_markdown(html: str) -> str:
         Markdown 格式字符串
     """
     if HAS_MARKDOWNIFY:
-        return md_convert(html, heading_style=DEFAULT_HEADING_STYLE)
+        return md_convert(
+            html,
+            heading_style=DEFAULT_HEADING_STYLE,
+            code_language_callback=_extract_code_language,
+        )
     else:
         # 降级方案：用正则移除所有 HTML 标签，再反转义 HTML 实体
         from html import unescape
