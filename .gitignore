@@ -9,6 +9,8 @@ __pycache__/
 .venv/
 venv/
 env/
+.uv-cache/
+.uv-python/
 
 # 构建产物
 dist/

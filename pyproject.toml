@@ -2,7 +2,7 @@
 name = "lakebook"
 version = "0.1.0"
 description = "Add your description here"
-requires-python = ">=3.14"
+requires-python = ">=3.10"
 dependencies = [
     "beautifulsoup4==4.14.3",
     "markdownify==1.2.2",
