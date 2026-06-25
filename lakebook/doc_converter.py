@@ -24,6 +24,8 @@
 
 import json
 import os
+import re
+import time
 import urllib.parse
 from typing import Dict
 
@@ -34,6 +36,14 @@ from lakebook.dependencies import (
     HAS_REQUESTS, http_get,
 )
 from lakebook.utils import pretty_md
+
+
+IMAGE_DOWNLOAD_TIMEOUT = 10
+IMAGE_DOWNLOAD_MAX_ATTEMPTS = 3
+IMG_TAG_SRC_RE = re.compile(
+    r'<img\b[^>]*\bsrc\s*=\s*(?:"(?P<double>[^"]+)"|\'(?P<single>[^\']+)\'|(?P<bare>[^\s>]+))[^>]*>',
+    re.IGNORECASE,
+)
 
 
 # ── HTML → Markdown ───────────────────────────────────────────────────────────
@@ -188,6 +198,59 @@ def replace_latex_images(html: str, latex_dict: Dict[str, str]) -> str:
 
 # ── 图片下载 ──────────────────────────────────────────────────────────────────
 
+def _replace_image_with_failure_notice(soup, image, src: str, reason: str) -> None:
+    """
+    将下载失败的图片替换为显式的文本提示，而不是继续保留图片标签。
+
+    这样输出结果不再依赖语雀外链，后续读者也能直接看到这里缺图了。
+    """
+    notice = f"\n[图片缺失：{reason}] {src}\n"
+    image.replace_with(soup.new_string(notice))
+
+def _replace_image_tags_with_failure_notice_html(html: str, reason: str) -> tuple[str, int]:
+    """
+    在无法使用 BeautifulSoup 时，直接用正则将 <img> 标签替换为纯文本提示。
+
+    这是一个降级兜底，目标是避免输出继续依赖语雀图片外链。
+    """
+    from html import escape
+
+    replaced_count = 0
+
+    def repl(match: re.Match[str]) -> str:
+        nonlocal replaced_count
+        src = match.group("double") or match.group("single") or match.group("bare") or ""
+        if not src:
+            return match.group(0)
+        replaced_count += 1
+        return f"\n[图片缺失：{reason}] {escape(src, quote=False)}\n"
+
+    return IMG_TAG_SRC_RE.sub(repl, html), replaced_count
+
+def _download_image_with_retry(src: str):
+    """
+    下载单张图片，失败时做有限次数重试。
+
+    仅对网络请求阶段重试；若最终仍失败，由调用方决定如何处理。
+    """
+    last_error: Exception | None = None
+
+    for attempt in range(1, IMAGE_DOWNLOAD_MAX_ATTEMPTS + 1):
+        try:
+            resp = http_get(src, timeout=IMAGE_DOWNLOAD_TIMEOUT)
+            resp.raise_for_status()
+            return resp
+        except Exception as e:
+            last_error = e
+            if attempt < IMAGE_DOWNLOAD_MAX_ATTEMPTS:
+                print(
+                    f"  下载图片失败，准备重试 ({attempt + 1}/{IMAGE_DOWNLOAD_MAX_ATTEMPTS}): {src}"
+                )
+                time.sleep(attempt)
+
+    assert last_error is not None
+    raise last_error
+
 def download_images_and_patch_html(
     output_dir_path: str,
     sanitized_title: str,
@@ -198,8 +261,9 @@ def download_images_and_patch_html(
 
     图片保存位置：<output_dir_path>/attachments/<sanitized_title>_001.jpg
     编号从 001 递增，扩展名根据 HTTP 响应的 Content-Type 自动推断。
+    下载失败时会自动重试；若最终仍失败，则在原位置写入失败提示与原始 URL 文本。
 
-    若依赖库（beautifulsoup4 / requests）未安装，直接返回原 HTML 不做修改。
+    若缺少图片处理依赖，图片会改为缺失提示与原始 URL 文本，避免继续保留外链。
 
     Args:
         output_dir_path:  当前文档的输出目录（必须已存在）
@@ -209,18 +273,45 @@ def download_images_and_patch_html(
     Returns:
         更新了 img src 属性的 HTML 字符串
     """
-    if not HAS_BS4 or not HAS_REQUESTS:
-        return html
+    if not HAS_BS4:
+        patched_html, replaced_count = _replace_image_tags_with_failure_notice_html(
+            html,
+            "缺少 beautifulsoup4 依赖",
+        )
+        if replaced_count == 0:
+            return html
+        print("  警告: 未安装 beautifulsoup4，文中图片将替换为缺失提示和原始链接")
+        print(f"  图片处理完成：成功 0/{replaced_count}，失败 {replaced_count}")
+        print(
+            f"  警告: 有 {replaced_count} 张图片无法处理，Markdown 中已写入原始链接文本，请手动处理"
+        )
+        return patched_html
 
     bs = BeautifulSoup(html, "html.parser")
     img_tags = bs.find_all("img")
     if not img_tags:
         return html
 
+    if not HAS_REQUESTS:
+        print("  警告: 未安装 requests，无法下载图片，文中图片将替换为缺失提示和原始链接")
+        failed_count = 0
+        for image in img_tags:
+            src = image.get("src", "")
+            if not src:
+                continue
+            _replace_image_with_failure_notice(bs, image, src, "缺少 requests 依赖")
+            failed_count += 1
+        print(f"  图片下载完成：成功 0/{len(img_tags)}，失败 {failed_count}")
+        print(
+            f"  警告: 有 {failed_count} 张图片无法下载，Markdown 中已写入原始链接文本，请手动处理"
+        )
+        return str(bs)
+
     # 确保 attachments/ 目录存在
     attachments_dir = os.path.join(output_dir_path, "attachments")
-    if not os.path.exists(attachments_dir):
-        os.makedirs(attachments_dir)
+
+    downloaded_count = 0
+    failed_count = 0
 
     for no, image in enumerate(img_tags, start=1):
         src = image.get("src", "")
@@ -228,19 +319,36 @@ def download_images_and_patch_html(
             continue
         try:
             print(f"  下载图片 ({no}/{len(img_tags)}): {src}")
-            resp = http_get(src, timeout=10)
+            resp = _download_image_with_retry(src)
             # 根据 Content-Type 推断扩展名，默认 .jpg
             ext = CONTENT_TYPE_TO_EXTENSION.get(
                 resp.headers.get("Content-Type", ""), ".jpg"
             )
             file_name = f"{sanitized_title}_{no:03d}{ext}"
+            if not os.path.exists(attachments_dir):
+                os.makedirs(attachments_dir)
             file_path = os.path.join(attachments_dir, file_name)
             with open(file_path, "wb") as f:
                 f.write(resp.content)
             # 将 HTML 中的图片路径改为相对路径，确保离线可用
             image["src"] = f"./attachments/{file_name}"
+            downloaded_count += 1
         except Exception as e:
+            failed_count += 1
             print(f"  下载图片失败 ({src}): {e}")
+            _replace_image_with_failure_notice(bs, image, src, "下载失败，请手动处理")
+
+    print(
+        f"  图片下载完成：成功 {downloaded_count}/{len(img_tags)}",
+        end="",
+    )
+    if failed_count > 0:
+        print(f"，失败 {failed_count}")
+        print(
+            f"  警告: 有 {failed_count} 张图片下载失败，Markdown 中已写入原始链接文本，请手动处理"
+        )
+    else:
+        print()
 
     return str(bs)
 
